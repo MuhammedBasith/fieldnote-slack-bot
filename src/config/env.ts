@@ -29,13 +29,6 @@ const envSchema = z.object({
 
   // App Config
   DEFAULT_TIMEZONE: z.string().default("America/Los_Angeles"),
-  DAILY_DIGEST_HOUR: z
-    .string()
-    .default("18")
-    .transform(Number),
-
-  // Optional: Secret for external cron trigger (generate with: openssl rand -hex 32)
-  CRON_SECRET: z.string().optional(),
 });
 
 function loadEnv() {
