@@ -43,6 +43,15 @@ export interface GeneratedPost {
   created_at: string;
 }
 
+export interface DigestRun {
+  id: string;
+  slack_user_id: string;
+  newest_message_ts: string;
+  message_count: number;
+  insight_count: number;
+  created_at: string;
+}
+
 // Supabase Database type for typed queries
 export interface Database {
   public: {
