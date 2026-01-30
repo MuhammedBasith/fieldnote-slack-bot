@@ -17,9 +17,9 @@ export interface InsightWithPosts {
 
 export const notificationService = {
   /**
-   * Send the daily digest DM with all insights and posts
+   * Send the Fieldnote digest DM with cleaner format
    */
-  async sendDailyDigest(
+  async sendFieldnoteDigest(
     userId: string,
     insightsWithPosts: InsightWithPosts[]
   ): Promise<void> {
@@ -27,64 +27,53 @@ export const notificationService = {
       throw new Error("Notification service not initialized");
     }
 
-    // Using 'any' for blocks since Slack's Block Kit types are complex
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const blocks: any[] = [
       {
         type: "header",
         text: {
           type: "plain_text",
-          text: "Today's Content Signals",
+          text: "Fieldnote",
           emoji: true,
         },
       },
       {
-        type: "section",
-        text: {
-          type: "mrkdwn",
-          text: `Found *${insightsWithPosts.length}* moment${insightsWithPosts.length > 1 ? "s" : ""} worth sharing.`,
-        },
+        type: "context",
+        elements: [
+          {
+            type: "mrkdwn",
+            text: `Found *${insightsWithPosts.length}* insight${insightsWithPosts.length > 1 ? "s" : ""} from your conversations`,
+          },
+        ],
       },
       { type: "divider" },
     ];
 
-    // Add each insight with its posts
+    // Add each insight in compact format
     insightsWithPosts.forEach((item, index) => {
       const { insight, xPost, linkedInPost } = item;
 
-      // Insight header and context
+      // Insight title and summary
       blocks.push({
         type: "section",
         text: {
           type: "mrkdwn",
-          text: `*${index + 1}. ${insight.topic}*\n\n_Why this matters:_\n${insight.core_insight}`,
+          text: `*${index + 1}. ${insight.topic}*`,
         },
       });
 
-      // X Draft
+      // Core insight as context
       blocks.push({
-        type: "section",
-        text: {
-          type: "mrkdwn",
-          text: `*X Draft* (${xPost.char_count} chars):\n\`\`\`${xPost.content}\`\`\``,
-        },
+        type: "context",
+        elements: [
+          {
+            type: "mrkdwn",
+            text: insight.core_insight,
+          },
+        ],
       });
 
-      // LinkedIn Draft (truncated for preview)
-      const linkedInPreview =
-        linkedInPost.content.length > 300
-          ? linkedInPost.content.substring(0, 300) + "..."
-          : linkedInPost.content;
-
-      blocks.push({
-        type: "section",
-        text: {
-          type: "mrkdwn",
-          text: `*LinkedIn Draft*:\n>${linkedInPreview.split("\n").join("\n>")}`,
-        },
-      });
-
-      // Action buttons
+      // Action buttons - compact with char count
       blocks.push({
         type: "actions",
         elements: [
@@ -92,8 +81,8 @@ export const notificationService = {
             type: "button",
             text: {
               type: "plain_text",
-              text: "View X Post",
-              emoji: true,
+              text: `X (${xPost.char_count}c)`,
+              emoji: false,
             },
             action_id: `view_x_${xPost.id}`,
             value: xPost.id,
@@ -102,8 +91,8 @@ export const notificationService = {
             type: "button",
             text: {
               type: "plain_text",
-              text: "View LinkedIn",
-              emoji: true,
+              text: "LinkedIn",
+              emoji: false,
             },
             action_id: `view_linkedin_${linkedInPost.id}`,
             value: linkedInPost.id,
@@ -112,8 +101,8 @@ export const notificationService = {
             type: "button",
             text: {
               type: "plain_text",
-              text: "Ignore",
-              emoji: true,
+              text: "Skip",
+              emoji: false,
             },
             style: "danger",
             action_id: `ignore_insight_${insight.id}`,
@@ -122,7 +111,10 @@ export const notificationService = {
         ],
       });
 
-      blocks.push({ type: "divider" });
+      // Only add divider between insights, not after the last one
+      if (index < insightsWithPosts.length - 1) {
+        blocks.push({ type: "divider" });
+      }
     });
 
     // Footer
@@ -131,26 +123,75 @@ export const notificationService = {
       elements: [
         {
           type: "mrkdwn",
-          text: '_Click "View" to copy the full post. Edit freely before publishing._',
+          text: "Click to view full post, then copy and edit before publishing",
         },
       ],
     });
 
     try {
       await slackClient.chat.postMessage({
-        channel: userId, // DM to user
-        text: `Today's Content Signals: Found ${insightsWithPosts.length} moments worth sharing.`,
+        channel: userId,
+        text: `Fieldnote: Found ${insightsWithPosts.length} insights`,
         blocks,
       });
 
-      logger.info("Daily digest DM sent", {
+      logger.info("Fieldnote digest sent", {
         userId,
         insightCount: insightsWithPosts.length,
       });
     } catch (error) {
-      logger.error("Failed to send daily digest DM", { error, userId });
+      logger.error("Failed to send Fieldnote digest", { error, userId });
       throw error;
     }
+  },
+
+  /**
+   * Send "no new messages" notification
+   */
+  async sendNoNewMessages(userId: string): Promise<void> {
+    if (!slackClient) {
+      throw new Error("Notification service not initialized");
+    }
+
+    try {
+      await slackClient.chat.postMessage({
+        channel: userId,
+        text: "No new conversations since your last Fieldnote. Check back after more discussions!",
+      });
+    } catch (error) {
+      logger.error("Failed to send no messages notification", { error, userId });
+      throw error;
+    }
+  },
+
+  /**
+   * Send "no insights found" notification
+   */
+  async sendNoInsights(userId: string, messageCount: number): Promise<void> {
+    if (!slackClient) {
+      throw new Error("Notification service not initialized");
+    }
+
+    try {
+      await slackClient.chat.postMessage({
+        channel: userId,
+        text: `Analyzed ${messageCount} messages but didn't find any standout insights this time. Keep the conversations going!`,
+      });
+    } catch (error) {
+      logger.error("Failed to send no insights notification", { error, userId });
+      throw error;
+    }
+  },
+
+  /**
+   * Legacy: Send the daily digest DM (keeping for backward compatibility)
+   */
+  async sendDailyDigest(
+    userId: string,
+    insightsWithPosts: InsightWithPosts[]
+  ): Promise<void> {
+    // Use the new cleaner format
+    return this.sendFieldnoteDigest(userId, insightsWithPosts);
   },
 
   /**
