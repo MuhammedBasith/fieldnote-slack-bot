@@ -68,19 +68,9 @@ export async function runDailyDigest(): Promise<void> {
           status: "pending",
         });
 
-        // Generate X post
-        const xPostContent = await postService.generatePost(
-          insight,
-          userProfile,
-          "x"
-        );
-
-        // Generate LinkedIn post
-        const linkedInPostContent = await postService.generatePost(
-          insight,
-          userProfile,
-          "linkedin"
-        );
+        // Generate both posts in single LLM call
+        const { xPost: xPostContent, linkedInPost: linkedInPostContent } =
+          await postService.generateBothPosts(insight, userProfile);
 
         // Store generated posts
         const storedXPost = await postService.storePost({
