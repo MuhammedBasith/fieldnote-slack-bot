@@ -1,0 +1,60 @@
+# Render Blueprint for Signal to Post
+# Deploy with: https://render.com/docs/infrastructure-as-code
+
+services:
+  # Main web service (Slack bot + API)
+  - type: web
+    name: fieldnote
+    runtime: node
+    plan: free
+    buildCommand: curl -fsSL https://bun.sh/install | bash && ~/.bun/bin/bun install
+    startCommand: ~/.bun/bin/bun run src/index.ts
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: LOG_LEVEL
+        value: info
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SLACK_BOT_TOKEN
+        sync: false
+      - key: SLACK_APP_TOKEN
+        sync: false
+      - key: SLACK_SIGNING_SECRET
+        sync: false
+      - key: SLACK_CHANNEL_IDS
+        sync: false
+      - key: SLACK_PRIMARY_USER_ID
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: DEFAULT_TIMEZONE
+        value: America/Los_Angeles
+      - key: DAILY_DIGEST_HOUR
+        value: "18"
+      - key: CRON_SECRET
+        generateValue: true
+
+  # Cron job to trigger daily digest (wakes up the free tier service)
+  - type: cron
+    name: fieldnote-daily-digest
+    runtime: node
+    plan: free
+    schedule: "0 18 * * *"  # 6 PM UTC - adjust for your timezone
+    buildCommand: echo "No build needed"
+    startCommand: |
+      curl -X POST \
+        -H "Authorization: Bearer $CRON_SECRET" \
+        -H "Content-Type: application/json" \
+        https://fieldnote.onrender.com/trigger-digest
+    envVars:
+      - key: CRON_SECRET
+        fromService:
+          name: fieldnote
+          type: web
+          envVarKey: CRON_SECRET
