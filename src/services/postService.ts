@@ -2,55 +2,69 @@ import { supabase } from "../db/client.ts";
 import type { GeneratedPost, UserProfile } from "../db/schema.ts";
 import { llmClient } from "../llm/client.ts";
 import {
-  POST_GENERATION_PROMPT,
+  COMBINED_POST_PROMPT,
   type ExtractedInsight,
+  type CombinedPostResponse,
 } from "../llm/prompts.ts";
 import { logger } from "../utils/logger.ts";
 
+/**
+ * Smart truncate at word boundary with ellipsis
+ */
+function smartTruncate(text: string, maxLength: number): string {
+  if (text.length <= maxLength) return text;
+
+  // Reserve space for ellipsis
+  const truncateAt = maxLength - 3;
+
+  // Find last space before truncateAt
+  let lastSpace = text.lastIndexOf(" ", truncateAt);
+
+  // If no space found or too short, just cut at truncateAt
+  if (lastSpace < truncateAt * 0.7) {
+    lastSpace = truncateAt;
+  }
+
+  return text.substring(0, lastSpace).trim() + "...";
+}
+
 export const postService = {
   /**
-   * Generate a post for a specific platform
+   * Generate both X and LinkedIn posts in a single LLM call
    */
-  async generatePost(
+  async generateBothPosts(
     insight: ExtractedInsight,
-    profile: UserProfile,
-    platform: "x" | "linkedin"
-  ): Promise<string> {
-    const systemPrompt = POST_GENERATION_PROMPT.system({
+    profile: UserProfile
+  ): Promise<{ xPost: string; linkedInPost: string }> {
+    const systemPrompt = COMBINED_POST_PROMPT.system({
       writing_tone: profile.writing_tone,
       stylistic_rules: profile.stylistic_rules,
       banned_phrases: profile.banned_phrases,
     });
 
-    const userPrompt =
-      platform === "x"
-        ? POST_GENERATION_PROMPT.xPost(insight)
-        : POST_GENERATION_PROMPT.linkedInPost(insight);
+    const userPrompt = COMBINED_POST_PROMPT.user(insight);
 
-    // Token limits: X posts need ~150 tokens (280 chars), LinkedIn ~600 tokens (300 words)
-    const maxTokens = platform === "x" ? 150 : 600;
-    let content = await llmClient.generateContent(systemPrompt, userPrompt, { maxTokens });
+    // Combined response needs ~800 tokens (150 for X + 600 for LinkedIn + JSON structure)
+    const response = await llmClient.generateJSON<CombinedPostResponse>(
+      systemPrompt,
+      userPrompt,
+      { maxTokens: 800 }
+    );
 
-    // For X, ensure under 280 chars
-    if (platform === "x" && content.length > 280) {
-      logger.warn("X post exceeded 280 chars, requesting shorter version", {
-        length: content.length,
+    let xPost = response.x_post;
+
+    // Smart truncation for X post if still over 280
+    if (xPost.length > 280) {
+      logger.warn("X post exceeded 280 chars, truncating", {
+        original: xPost.length,
       });
-
-      content = await llmClient.generateContent(
-        systemPrompt,
-        `${userPrompt}\n\nIMPORTANT: Your previous response was ${content.length} characters. It MUST be under 280. Be more concise.`,
-        { maxTokens: 150 }
-      );
-
-      // Hard truncate as last resort
-      if (content.length > 280) {
-        content = content.substring(0, 277) + "...";
-        logger.warn("X post truncated to 280 chars");
-      }
+      xPost = smartTruncate(xPost, 280);
     }
 
-    return content;
+    return {
+      xPost,
+      linkedInPost: response.linkedin_post,
+    };
   },
 
   /**
