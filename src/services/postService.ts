@@ -142,4 +142,23 @@ export const postService = {
 
     return data || [];
   },
+
+  /**
+   * Update post content (when user edits in modal)
+   */
+  async updatePostContent(postId: string, content: string): Promise<void> {
+    const { error } = await supabase
+      .from("generated_posts")
+      .update({
+        content,
+        char_count: content.length,
+        status: "edited",
+      })
+      .eq("id", postId);
+
+    if (error) {
+      logger.error("Failed to update post content", { error, postId });
+      throw error;
+    }
+  },
 };
