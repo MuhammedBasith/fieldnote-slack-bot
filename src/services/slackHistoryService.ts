@@ -119,7 +119,7 @@ export const slackHistoryService = {
   async getMessagesSince(
     channelIds: string[],
     oldestTs?: string,
-    maxHoursBack: number = 24
+    maxHoursBack: number = 96 // 4 days default for testing
   ): Promise<MessageWithUser[]> {
     if (!slackClient) {
       throw new Error("Slack history service not initialized");
