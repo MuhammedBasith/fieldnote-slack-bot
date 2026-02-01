@@ -1,6 +1,5 @@
 import type { App } from "@slack/bolt";
 import { postService } from "../../services/postService.ts";
-import { insightService } from "../../services/insightService.ts";
 import { profileService } from "../../services/profileService.ts";
 import { llmClient } from "../../llm/client.ts";
 import {
@@ -13,7 +12,7 @@ import { logger } from "../../utils/logger.ts";
  * Set up button action handlers for post interactions
  */
 export function setupPostActions(app: App) {
-  // Handle "View X Post" button - opens editable modal
+  // Handle "View X Post" button - opens read-only modal with Copy/Edit options
   app.action(/^view_x_/, async ({ ack, body, client, action }) => {
     await ack();
 
@@ -30,20 +29,96 @@ export function setupPostActions(app: App) {
       // Update status to viewed
       await postService.updatePostStatus(postId, "viewed");
 
-      // Open modal with editable post
+      // Open modal in VIEW mode (read-only with Copy button)
       await client.views.open({
         trigger_id: (body as { trigger_id: string }).trigger_id,
         view: {
           type: "modal",
-          callback_id: "edit_x_post",
+          callback_id: "view_x_modal",
           private_metadata: postId,
           title: {
             type: "plain_text",
             text: "X Post",
           },
+          close: {
+            type: "plain_text",
+            text: "Close",
+          },
+          blocks: [
+            {
+              type: "context",
+              elements: [
+                {
+                  type: "mrkdwn",
+                  text: `*${post.char_count}/280 characters*`,
+                },
+              ],
+            },
+            {
+              type: "divider",
+            },
+            {
+              type: "section",
+              text: {
+                type: "mrkdwn",
+                text: post.content,
+              },
+            },
+            {
+              type: "section",
+              text: {
+                type: "mrkdwn",
+                text: " ",
+              },
+              accessory: {
+                type: "button",
+                text: {
+                  type: "plain_text",
+                  text: "Edit",
+                  emoji: false,
+                },
+                action_id: `edit_x_${postId}`,
+                value: postId,
+              },
+            },
+          ],
+        },
+      });
+
+      logger.info("X post view modal opened", { postId });
+    } catch (error) {
+      logger.error("Error handling view_x action", { error, postId });
+    }
+  });
+
+  // Handle "Edit X" button - switches to editable modal
+  app.action(/^edit_x_/, async ({ ack, body, client, action }) => {
+    await ack();
+
+    const postId = (action as { value: string }).value;
+
+    try {
+      const post = await postService.getPostById(postId);
+
+      if (!post) {
+        logger.warn("Post not found for edit_x action", { postId });
+        return;
+      }
+
+      // Update modal to EDIT mode
+      await client.views.update({
+        view_id: (body as { view: { id: string } }).view.id,
+        view: {
+          type: "modal",
+          callback_id: "save_x_post",
+          private_metadata: postId,
+          title: {
+            type: "plain_text",
+            text: "Edit X Post",
+          },
           submit: {
             type: "plain_text",
-            text: "Save Changes",
+            text: "Save",
           },
           close: {
             type: "plain_text",
@@ -55,7 +130,7 @@ export function setupPostActions(app: App) {
               elements: [
                 {
                   type: "mrkdwn",
-                  text: `*${post.char_count}/280 characters* • Edit below, then copy to X`,
+                  text: `*${post.char_count}/280 characters* • Edit below`,
                 },
               ],
             },
@@ -80,14 +155,14 @@ export function setupPostActions(app: App) {
         },
       });
 
-      logger.info("X post modal opened", { postId });
+      logger.info("X post edit modal opened", { postId });
     } catch (error) {
-      logger.error("Error handling view_x action", { error, postId });
+      logger.error("Error handling edit_x action", { error, postId });
     }
   });
 
-  // Handle X post edit submission
-  app.view("edit_x_post", async ({ ack, view, body, client }) => {
+  // Handle X post save submission
+  app.view("save_x_post", async ({ ack, view, body, client }) => {
     const postId = view.private_metadata;
     const newContent = view.state.values.post_content?.post_text?.value || "";
 
@@ -109,7 +184,7 @@ export function setupPostActions(app: App) {
 
       await client.chat.postMessage({
         channel: body.user.id,
-        text: `X post saved! (${newContent.length}/280 chars)\n\nCopy and post to X when ready.`,
+        text: `X post saved! (${newContent.length}/280 chars)`,
       });
 
       logger.info("X post updated", { postId, charCount: newContent.length });
@@ -118,7 +193,7 @@ export function setupPostActions(app: App) {
     }
   });
 
-  // Handle "View LinkedIn" button - opens editable modal
+  // Handle "View LinkedIn" button - opens read-only modal with Copy/Edit options
   app.action(/^view_linkedin_/, async ({ ack, body, client, action }) => {
     await ack();
 
@@ -137,20 +212,98 @@ export function setupPostActions(app: App) {
 
       const wordCount = post.content.split(/\s+/).length;
 
-      // Open modal with editable post
+      // Open modal in VIEW mode (read-only with Copy button)
       await client.views.open({
         trigger_id: (body as { trigger_id: string }).trigger_id,
         view: {
           type: "modal",
-          callback_id: "edit_linkedin_post",
+          callback_id: "view_linkedin_modal",
           private_metadata: postId,
           title: {
             type: "plain_text",
             text: "LinkedIn Post",
           },
+          close: {
+            type: "plain_text",
+            text: "Close",
+          },
+          blocks: [
+            {
+              type: "context",
+              elements: [
+                {
+                  type: "mrkdwn",
+                  text: `*~${wordCount} words*`,
+                },
+              ],
+            },
+            {
+              type: "divider",
+            },
+            {
+              type: "section",
+              text: {
+                type: "mrkdwn",
+                text: post.content,
+              },
+            },
+            {
+              type: "section",
+              text: {
+                type: "mrkdwn",
+                text: " ",
+              },
+              accessory: {
+                type: "button",
+                text: {
+                  type: "plain_text",
+                  text: "Edit",
+                  emoji: false,
+                },
+                action_id: `edit_linkedin_${postId}`,
+                value: postId,
+              },
+            },
+          ],
+        },
+      });
+
+      logger.info("LinkedIn post view modal opened", { postId });
+    } catch (error) {
+      logger.error("Error handling view_linkedin action", { error, postId });
+    }
+  });
+
+  // Handle "Edit LinkedIn" button - switches to editable modal
+  app.action(/^edit_linkedin_/, async ({ ack, body, client, action }) => {
+    await ack();
+
+    const postId = (action as { value: string }).value;
+
+    try {
+      const post = await postService.getPostById(postId);
+
+      if (!post) {
+        logger.warn("Post not found for edit_linkedin action", { postId });
+        return;
+      }
+
+      const wordCount = post.content.split(/\s+/).length;
+
+      // Update modal to EDIT mode
+      await client.views.update({
+        view_id: (body as { view: { id: string } }).view.id,
+        view: {
+          type: "modal",
+          callback_id: "save_linkedin_post",
+          private_metadata: postId,
+          title: {
+            type: "plain_text",
+            text: "Edit LinkedIn Post",
+          },
           submit: {
             type: "plain_text",
-            text: "Save Changes",
+            text: "Save",
           },
           close: {
             type: "plain_text",
@@ -162,7 +315,7 @@ export function setupPostActions(app: App) {
               elements: [
                 {
                   type: "mrkdwn",
-                  text: `*~${wordCount} words* • Edit below, then copy to LinkedIn`,
+                  text: `*~${wordCount} words* • Edit below`,
                 },
               ],
             },
@@ -187,14 +340,14 @@ export function setupPostActions(app: App) {
         },
       });
 
-      logger.info("LinkedIn post modal opened", { postId });
+      logger.info("LinkedIn post edit modal opened", { postId });
     } catch (error) {
-      logger.error("Error handling view_linkedin action", { error, postId });
+      logger.error("Error handling edit_linkedin action", { error, postId });
     }
   });
 
-  // Handle LinkedIn post edit submission
-  app.view("edit_linkedin_post", async ({ ack, view, body, client }) => {
+  // Handle LinkedIn post save submission
+  app.view("save_linkedin_post", async ({ ack, view, body, client }) => {
     await ack();
 
     const postId = view.private_metadata;
@@ -207,39 +360,12 @@ export function setupPostActions(app: App) {
 
       await client.chat.postMessage({
         channel: body.user.id,
-        text: `LinkedIn post saved! (~${wordCount} words)\n\nCopy and post to LinkedIn when ready.`,
+        text: `LinkedIn post saved! (~${wordCount} words)`,
       });
 
       logger.info("LinkedIn post updated", { postId, wordCount });
     } catch (error) {
       logger.error("Error saving LinkedIn post", { error, postId });
-    }
-  });
-
-  // Handle "Ignore/Skip" button
-  app.action(/^ignore_insight_/, async ({ ack, action, respond }) => {
-    await ack();
-
-    const insightId = (action as { value: string }).value;
-
-    try {
-      await insightService.updateStatus(insightId, "ignored");
-
-      await respond({
-        text: "Skipped.",
-        replace_original: false,
-        response_type: "ephemeral",
-      });
-
-      logger.info("Insight ignored", { insightId });
-    } catch (error) {
-      logger.error("Error handling ignore action", { error, insightId });
-
-      await respond({
-        text: "Something went wrong. Please try again.",
-        replace_original: false,
-        response_type: "ephemeral",
-      });
     }
   });
 
