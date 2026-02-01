@@ -11,6 +11,11 @@ import { logger } from "./utils/logger.ts";
 const expressApp = express();
 expressApp.use(express.json());
 
+// Health check endpoint for UptimeRobot
+expressApp.get("/health", (_req, res) => {
+  res.status(200).json({ status: "ok" });
+});
+
 // Initialize services with Slack client
 initNotificationService(slackClient);
 initSlackHistoryService(slackClient);
