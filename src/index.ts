@@ -11,17 +11,6 @@ import { logger } from "./utils/logger.ts";
 const expressApp = express();
 expressApp.use(express.json());
 
-// Health check endpoint
-expressApp.get("/health", (_req, res) => {
-  res.json({
-    status: "ok",
-    timestamp: new Date().toISOString(),
-    timezone: env.DEFAULT_TIMEZONE,
-    channels: env.SLACK_CHANNEL_IDS,
-  });
-});
-
-
 // Initialize services with Slack client
 initNotificationService(slackClient);
 initSlackHistoryService(slackClient);
