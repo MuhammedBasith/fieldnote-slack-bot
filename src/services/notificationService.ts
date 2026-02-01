@@ -97,17 +97,6 @@ export const notificationService = {
             action_id: `view_linkedin_${linkedInPost.id}`,
             value: linkedInPost.id,
           },
-          {
-            type: "button",
-            text: {
-              type: "plain_text",
-              text: "Skip",
-              emoji: false,
-            },
-            style: "danger",
-            action_id: `ignore_insight_${insight.id}`,
-            value: insight.id,
-          },
         ],
       });
 
