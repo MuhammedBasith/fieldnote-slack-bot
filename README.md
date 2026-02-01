@@ -159,6 +159,16 @@ notificationService (send DM with buttons)
 User edits in modal → postService.updatePostContent()
 ```
 
+## Future Scope
+
+- **Auto-posting**: Direct publishing to X and LinkedIn via their APIs
+- **Scheduled digests**: Cron-based daily/weekly digest delivery
+- **Multi-user support**: Team-wide insights with individual style profiles
+- **Analytics dashboard**: Track which posts performed best
+- **Thread context**: Include Slack thread replies in insight extraction
+- **Custom prompts**: User-defined templates for different content types
+- **Feedback loop**: Learn from edited posts to improve generation quality
+
 ## License
 
 MIT
